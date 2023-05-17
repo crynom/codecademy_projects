@@ -26,10 +26,14 @@ library(dplyr)
 library(readr)
 
 # Load the data
-
+confirmed <-  read_csv("corona_confirmed.csv")
+recovered <-  read_csv("corona_recovered.csv")
+deaths <-  read_csv("corona_deaths.csv")
 
 # Inspect the data
-
+head(confirmed)
+head(recovered)
+head(deaths)
 ```
 
 # Looking At March 22nd, 2020
@@ -40,7 +44,8 @@ Let's warm up by finding the total number of confirmed cases on March 22nd, 2020
 
 ```{r}
 # Sum the total number of cases on March 22nd
-
+total_cases <- confirmed %>% select(`3/22/20`) %>% sum()
+total_cases
 ```
 
 # Filter By Values
@@ -55,12 +60,16 @@ You may want to save these results to variables as they will be useful later!
 
 ```{r}
 # Filter for countries in the northern hemisphere
-
+total_cases_north_of_equator <- confirmed %>% filter(Lat > 0) %>% select(`3/22/20`) %>% sum()
+total_cases_north_of_equator
 
 # Filter for Australia cases
+total_australia_cases <- confirmed %>% filter(`Country/Region` == 'Australia') %>% select(`3/22/20`) %>% sum()
+total_australia_cases
 
 # Display percentages
-
+total_cases_north_of_equator / total_cases * 100
+total_australia_cases / total_cases * 100
 ```
 
 # Group By Country
@@ -78,8 +87,11 @@ After creating this new data frame inspect it. To confirm you did the `group_by(
 
 ```{r}
 # Group by countries
+countries_confirmed <- confirmed %>% group_by(`Country/Region`) %>% summarize_at(vars(-Lat, -Long, -`Province/State`),sum)
+countries_confirmed
 
 # Filter the grouped data set for Australia
+countries_confirmed %>% filter(`Country/Region` == 'Australia') %>% select(`3/22/20`)
 ```
 
 # Investigating The Recovered Dataset
@@ -88,13 +100,17 @@ Do the same process of grouping by country using the recovered dataset. What per
 
 ```{r}
 # Group by countries
-
+countries_recovered <- recovered %>% group_by(`Country/Region`) %>% summarize_at(vars(-Lat, -Long, -`Province/State`),sum)
+total_us <- countries_confirmed %>% filter(`Country/Region` == 'US') %>% select(`3/22/20`)
+recovered_us <- countries_recovered %>% filter(`Country/Region` == 'US') %>% select(`3/22/20`)
+recovered_us /total_us * 100
 ```
 
 You may see some surprising results &mdash; are there really zero recovered cases in the US? Let's take a closer look at the `US` row in the `recovered` table. Either view the table in RStudio's interface, or print the row in the cell block below. What do you notice about the values as you scroll to March 22nd?
 
 ```{r}
 # Filter to inspect the US row
+countries_recovered %>% filter(`Country/Region` == 'US')
 ```
 
 It seems like the number of recovered cases is steadily increasing to 17, until March 18th, when it suddenly drops back to 0. This is surprising, and not what we expected! Perhaps we're misunderstanding the format of the data, or perhaps there's an error in reporting the data.
@@ -104,7 +120,9 @@ What's the best course of action at this point? One strategy is to investigate t
 If we wanted to use the current file, instead of reporting the number of confirmed and recovered cases in the US on March 22nd, we could report the maximum number of confirmed and recovered cases. Let's give that a shot using the `max()` function. Make sure to also use `select()` to remove the `Country/Region` column &mdash; we can't take the max of a row if it contains a string.
 ```{r}
 # Find the maximum number of confirmed and recovered cases
-
+max_confirmed <- countries_confirmed %>% filter(`Country/Region` == 'US') %>% select(-`Country/Region`) %>% max()
+max_recovered <- countries_recovered %>% filter(`Country/Region` == 'US') %>% select(-`Country/Region`) %>% max()
+max_recovered / max_confirmed * 100
 ```
 
 # Transposing Data Frames
@@ -115,7 +133,8 @@ We could then find the maximum value of a country by simply selecting the approp
 
 ```{r}
 # Transpose the data frame
-
+transposed_confirmed <- countries_confirmed %>% t() %>% as.data.frame()
+transposed_confirmed %>% head()
 ```
 
 
@@ -133,7 +152,8 @@ First, we installed and loaded the `janitor` package. Then we passed our transpo
 library(janitor)
 
 # Make the first row the column titles
-
+transposed_confirmed <- transposed_confirmed %>% row_to_names(row_number = 1)
+transposed_confirmed %>% head()
 ```
 
 We're getting closer. If you printed the head of the data frame you just created, you might have noticed that the columns are now of type `<fctr>`, or factor. This was one of the side effects of rotating the data frame. We want to turn all of these columns back into doubles.
@@ -146,14 +166,15 @@ Finally, after calling `apply()`, pipe the result through `as.data.frame()` to e
 
 ```{r}
 # Transform the columns to numeric values
-
+transposed_confirmed <- apply(transposed_confirmed, 2, as.numeric) %>% as.data.frame()
+head(transposed_confirmed)
 ```
 
 Nice work - we got there! Let's see what our hard work allows us to do. Let's once again find the maximum number of cases reported in the `US`. To do so, simply select the `US` column and pipe the result to the `max()` function. This should be the same value that we found before we rotate the data frame.
 
 ```{r}
 # Find the maximum number of confirmed cases in the US
-
+transposed_confirmed %>% select(US) %>% max()
 ```
 
 # Extra Credit: Visualization
@@ -166,7 +187,9 @@ Let's build a line graph showing the number of confirmed cases over time for a p
 
 ```{r}
 # Add the date column
-
+transposed_confirmed <- transposed_confirmed %>% mutate(date = c(1:nrow(transposed_confirmed)))
+head(select(transposed_confirmed, date))
+transposed_confirmed
 ```
 
 Great! Our date column is all set. Let's now graph the number of cases in Italy over the days in our dataset. We'll use the `ggplot2` library to do this. Use a combination of `ggplot()`, `aes()`, and `geom_line()` to make our graph! Once again, if you're unfamiliar with graphing, try to do some online research to learn how to do this!
@@ -174,7 +197,7 @@ Great! Our date column is all set. Let's now graph the number of cases in Italy 
 ```{r}
 library(ggplot2)
 # Create a line graph with date on the X axis and number of cases in Italy on the Y axis
-
+transposed_confirmed %>% ggplot(aes(x = date, y = Italy)) + geom_line()
 ```
 
 That line of code is pretty concise. That's one of the reasons why we wanted to rotate the data frame. Having a column containing only the confirmed cases from a particular country made this graph relatively simple to create.
@@ -183,7 +206,7 @@ Finally, let's do a bit of work to add a title, and to fix the names of the axes
 
 ```{r}
 # Add a proper title, x label, and y label
-
+transposed_confirmed %>% ggplot(aes(x = date, y = Italy)) + geom_line() + labs(x = "Number of days since January 22nd, 2020", y = "Number of confirmed cases", title = "Confirmed cases of COVID-19 in Italy")
 ```
 
 In the next section we'll give you ideas on ways to continue visualizing this data.
